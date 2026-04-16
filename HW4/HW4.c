@@ -56,7 +56,7 @@ int main() {
     }
 
     // Set up I2C
-    i2c_init(I2C_PORT, 2000 * 1000);
+    i2c_init(I2C_PORT, 3000 * 1000); // reached 260hz with 3Mhz
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
@@ -86,7 +86,7 @@ int main() {
 
         // heartbeat 
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-        sleep_ms(0.1);
+        sleep_ms(0.0001);
         
     }
 }
