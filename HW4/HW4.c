@@ -56,7 +56,7 @@ int main() {
     }
 
     // Set up I2C
-    i2c_init(I2C_PORT, 500 * 1000);
+    i2c_init(I2C_PORT, 1000 * 1000);
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
