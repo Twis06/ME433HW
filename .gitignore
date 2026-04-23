@@ -5,3 +5,4 @@ adafruit-circuitpython-raspberry_pi_pico2_w-en_US-10.1.4.uf2
 build/
 .vscode/
 /hw1
+*.mov
