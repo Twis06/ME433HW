@@ -94,7 +94,7 @@ static void mpu6050_init(void) {
     uint8_t who = imu_read_reg(WHO_AM_I);
     printf("WHO_AM_I = 0x%02X\n", who);
 
-    if (who != 0x68 && who != 0x98) {
+    if (who != 0x68 && who != 0x98 ) {
         printf("IMU not detected. Expected 0x68 or 0x98\n");
         imu_error_loop();
     }
