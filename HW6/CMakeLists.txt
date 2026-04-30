@@ -28,36 +28,40 @@ set(PICO_BOARD pico2_w CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(HW7 C CXX ASM)
+project(HW6 C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(HW7 HW7.c )
+add_executable(HW6
+        HW6.c
+        usb_descriptors.c
+        )
 
-pico_set_program_name(HW7 "HW7")
-pico_set_program_version(HW7 "0.1")
+pico_set_program_name(HW6 "HW6")
+pico_set_program_version(HW6 "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(HW7 0)
-pico_enable_stdio_usb(HW7 0)
+pico_enable_stdio_uart(HW6 1)
+pico_enable_stdio_usb(HW6 0)
 
 # Add the standard library to the build
-target_link_libraries(HW7
-        pico_stdlib)
+target_link_libraries(HW6
+        pico_stdlib
+        pico_cyw43_arch_none
+        tinyusb_device
+        tinyusb_board)
 
 # Add the standard include files to the build
-target_include_directories(HW7 PRIVATE
+target_include_directories(HW6 PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
 # Add any user requested libraries
-target_link_libraries(HW7 
-        hardware_spi
-        pico_cyw43_arch_none
+target_link_libraries(HW6 
+        hardware_i2c
         )
 
-pico_add_extra_outputs(HW7)
-
+pico_add_extra_outputs(HW6)
