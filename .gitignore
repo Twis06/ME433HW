@@ -8,3 +8,5 @@ build/
 .vscode/
 /hw1
 *.mov
+FDCAN_example
+test
