@@ -1,129 +1,133 @@
 #include <math.h>
-#include <stdio.h>
+#include <stdint.h>
 #include "pico/stdlib.h"
-#include "pico/stdio_usb.h"
 #include "hardware/spi.h"
-#include "pico/cyw43_arch.h"
 
-// SPI Defines
-// We are going to use SPI 0, and allocate it to the following GPIO pins
-// Pins can be changed, see the GPIO function select table in the datasheet for information on GPIO assignments
 #define SPI_PORT spi0
 #define PIN_MISO 16
-#define PIN_CS_DAC   17
-#define PIN_SCK  18
+#define PIN_CS_DAC 17
+#define PIN_SCK 18
 #define PIN_MOSI 19
 #define PIN_CS_RAM 20
 
 #define RAM_CMD_WRMR 0x01
 #define RAM_CMD_WRITE 0x02
 #define RAM_CMD_READ 0x03
-#define RAM_MODE_BYTE 0x00
+#define RAM_MODE_SEQ 0x40
+
+#define SPI_BAUD_HZ (1000 * 1000)
+#define SINE_SAMPLES 1000
+#define BYTES_PER_SAMPLE 2
+#define DAC_MAX_VALUE 1023u
+#define PI 3.14159265358979323846f
 
 static inline void cs_select(uint cs_pin) {
-    asm volatile("nop \n nop \n nop"); // FIXME
-    gpio_put(cs_pin, 0); // pull low 
-    asm volatile("nop \n nop \n nop"); // FIXME
+    asm volatile("nop \n nop \n nop");
+    gpio_put(cs_pin, 0);
+    asm volatile("nop \n nop \n nop");
 }
 
 static inline void cs_deselect(uint cs_pin) {
-    asm volatile("nop \n nop \n nop"); // FIXME
+    asm volatile("nop \n nop \n nop");
     gpio_put(cs_pin, 1);
-    asm volatile("nop \n nop \n nop"); // FIXME
+    asm volatile("nop \n nop \n nop");
 }
 
-static void spi_ram_init(){
-    // RAM initialisation sequence goes here
-    uint8_t data[2];
-    data[0] = RAM_CMD_WRMR;
-    data[1] = RAM_MODE_BYTE;
+static void spi_ram_init(void) {
+    uint8_t data[2] = {RAM_CMD_WRMR, RAM_MODE_SEQ};
+
     cs_select(PIN_CS_RAM);
-    spi_write_blocking(SPI_PORT, data, 2); // where data is a uint8_t array with length 2
+    spi_write_blocking(SPI_PORT, data, sizeof(data));
     cs_deselect(PIN_CS_RAM);
 }
 
+static void spi_ram_write(uint16_t address, const uint8_t data[BYTES_PER_SAMPLE]) {
+    uint8_t packet[3] = {
+        RAM_CMD_WRITE,
+        (uint8_t)(address >> 8),
+        (uint8_t)(address & 0xFF),
+    };
 
-void spi_ram_write(uint16_t address, uint8_t * value, int len){
-    // RAM write sequence goes here
-    // address is 16 bits, and the packet is 8 bits array. 
-    uint8_t packet[3 + len];
-    packet[0] = RAM_CMD_WRITE;// instruction for write 
-    packet[1] = (address >> 8); // high byte of address, only keeping the first 8 bits 
-    packet[2] = (address & 0xFF); // low byte of address
-    for(int i = 0; i < len; i++){
-        packet[3 + i] = value[i];
-    }
-    
     cs_select(PIN_CS_RAM);
-    spi_write_blocking(SPI_PORT, packet, 3 + len);
+    spi_write_blocking(SPI_PORT, packet, sizeof(packet));
+    spi_write_blocking(SPI_PORT, data, BYTES_PER_SAMPLE);
     cs_deselect(PIN_CS_RAM);
 }
 
-void ram_write_sine(){
+static void spi_ram_read(uint16_t address, uint8_t data[BYTES_PER_SAMPLE]) {
+    uint8_t packet[3] = {
+        RAM_CMD_READ,
+        (uint8_t)(address >> 8),
+        (uint8_t)(address & 0xFF),
+    };
 
-    for (int i = 0; i< 1024; i++){
+    cs_select(PIN_CS_RAM);
+    spi_write_blocking(SPI_PORT, packet, sizeof(packet));
+    spi_read_blocking(SPI_PORT, 0, data, BYTES_PER_SAMPLE);
+    cs_deselect(PIN_CS_RAM);
+}
 
-        uint8_t value = (uint8_t)(127.5 * (1 + sin(2 * M_PI * i / 1024))); // example sine wave values
-        spi_ram_write(i, &value, 1);
+static uint16_t make_dac_command(float voltage) {
+    uint16_t dac_value = (uint16_t)((voltage * DAC_MAX_VALUE / 3.3f) + 0.5f);
+
+    if (dac_value > DAC_MAX_VALUE) {
+        dac_value = DAC_MAX_VALUE;
+    }
+
+    return (uint16_t)(0x3000 | (dac_value << 2));
+}
+
+static void write_sine_to_ram(void) {
+    float sine[SINE_SAMPLES];
+
+    for (uint16_t i = 0; i < SINE_SAMPLES; i++) {
+        sine[i] = 1.65f * (sinf(2.0f * PI * (float)i / (float)SINE_SAMPLES) + 1.0f);
+    }
+
+    for (uint16_t i = 0; i < SINE_SAMPLES; i++) {
+        uint16_t dac_command = make_dac_command(sine[i]);
+        uint8_t data[BYTES_PER_SAMPLE] = {
+            (uint8_t)(dac_command >> 8),
+            (uint8_t)(dac_command & 0xFF),
+        };
+
+        spi_ram_write((uint16_t)(i * BYTES_PER_SAMPLE), data);
     }
 }
 
-void ram_read(){
-    uint8_t read_value;
-    for (int i = 0; i < 1024; i++){
-        // RAM read sequence goes here
-        uint8_t packet[3];
-        packet[0] = RAM_CMD_READ; // instruction for read
-        // splitting the 16-bit address into two 8-bit values for the packet
-        packet[1] = (i >> 8); // high byte of address (first 8 bits) (you move the bits to the right by 8 to get the high byte, so you get rid of the last 8 bits)
-        packet[2] = (i & 0xFF); // low byte of address (last 8 bits)
-        cs_select(PIN_CS_RAM);
-        spi_write_blocking(SPI_PORT, packet, 3);
-        spi_read_blocking(SPI_PORT, 0, &read_value, 1);
-        cs_deselect(PIN_CS_RAM);
-        printf("Address: %d, Value: %d\n", i, read_value);
-    }
+static void spi_dac_write(const uint8_t data[BYTES_PER_SAMPLE]) {
+    cs_select(PIN_CS_DAC);
+    spi_write_blocking(SPI_PORT, data, BYTES_PER_SAMPLE);
+    cs_deselect(PIN_CS_DAC);
 }
 
-int main()
-{
-    stdio_init_all();
-    sleep_ms(2000);
-    while (!stdio_usb_connected()) {
-        sleep_ms(100);
-    }
-    printf("USB serial connected\n");
-
-    // Initialise the Wi-Fi chip
-    if (cyw43_arch_init()) {
-        printf("Wi-Fi init failed\n");
-        return -1;
-    }
-
-    // SPI initialisation. This example will use SPI at 1MHz.
-    spi_init(SPI_PORT, 1000*1000);
+static void init_spi(void) {
+    spi_init(SPI_PORT, SPI_BAUD_HZ);
     gpio_set_function(PIN_MISO, GPIO_FUNC_SPI);
-    gpio_set_function(PIN_CS_DAC,   GPIO_FUNC_SIO);
-    gpio_set_function(PIN_SCK,  GPIO_FUNC_SPI);
+    gpio_set_function(PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_MOSI, GPIO_FUNC_SPI);
-    gpio_set_function(PIN_CS_RAM, GPIO_FUNC_SIO);
-    
-    // // Chip select is active-low, so we'll initialise it to a driven-high state
+
+    gpio_init(PIN_CS_DAC);
     gpio_set_dir(PIN_CS_DAC, GPIO_OUT);
     gpio_put(PIN_CS_DAC, 1);
+
+    gpio_init(PIN_CS_RAM);
     gpio_set_dir(PIN_CS_RAM, GPIO_OUT);
     gpio_put(PIN_CS_RAM, 1);
-    // // For more examples of SPI use see https://github.com/raspberrypi/pico-examples/tree/master/spi
+}
 
+int main(void) {
+    stdio_init_all();
+    init_spi();
     spi_ram_init();
-    ram_write_sine();
-    ram_read();
-
-    // Example to turn on the Pico W LED
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+    write_sine_to_ram();
 
     while (true) {
-        printf("Hello, world!\n");
-        sleep_ms(1000);
+        for (uint16_t i = 0; i < SINE_SAMPLES; i++) {
+            uint8_t data[BYTES_PER_SAMPLE];
+            spi_ram_read((uint16_t)(i * BYTES_PER_SAMPLE), data);
+            spi_dac_write(data);
+            sleep_ms(1);
+        }
     }
 }
