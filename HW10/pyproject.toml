@@ -1,0 +1,8 @@
+[project]
+name = "hw10"
+version = "0.1.0"
+description = "HW10 Pygame Zero project"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pgzero",
+]
