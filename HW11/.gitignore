@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+
+# Local editor/cache data
+.cache/
+**/.cache/
+
+# Pico / CMake build output
+HW11Pico/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+build.ninja
+.ninja_deps
+.ninja_log
+
+# STM32CubeIDE generated build output
+HW11STM/Debug/
+HW11STM/Release/
+
+# Common embedded build artifacts
+*.o
+*.d
+*.su
+*.cyclo
+*.elf
+*.bin
+*.hex
+*.uf2
+*.map
+*.list
+*.dis
+
+# Backup/temp files
+*~
+*.bak
+*.tmp
+*.swp
