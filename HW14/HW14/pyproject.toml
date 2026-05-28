@@ -1,0 +1,13 @@
+[project]
+name = "hw14-hx711-plotter"
+version = "0.1.0"
+description = "Live serial plotter for HX711 readings from HW14 Pico firmware."
+requires-python = ">=3.11"
+dependencies = [
+    "matplotlib>=3.9",
+    "numpy>=2.0",
+    "pyserial>=3.5",
+]
+
+[tool.uv]
+package = false
