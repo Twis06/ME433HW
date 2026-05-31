@@ -60,6 +60,8 @@ static void CAN_User_Init(void);
 static void CAN_Send_Button_Message(void);
 static void CAN_Poll_Rx(void);
 static uint8_t CAN_DlcToBytes(uint32_t dlc);
+static void CAN_Print_Status(const char *prefix);
+static void CAN_Recover_If_BusOff(void);
 
 /* USER CODE END PFP */
 
@@ -124,7 +126,7 @@ int main(void)
   CAN_User_Init();
 
   /* -- Sample board code to send message over COM1 port ---- */
-  printf("FDCAN demo ready. Press B1 to send CAN ID 0x123.\n\r");
+  printf("Classic CAN demo ready. Press B1 to send CAN ID 0x111.\n\r");
 
   /* -- Sample board code to switch on leds ---- */
   BSP_LED_On(LED_GREEN);
@@ -166,14 +168,14 @@ void SystemClock_Config(void)
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  __HAL_FLASH_SET_LATENCY(FLASH_LATENCY_0);
+  __HAL_FLASH_SET_LATENCY(FLASH_LATENCY_1);
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV4;
+  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -189,7 +191,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -214,17 +216,17 @@ static void MX_FDCAN1_Init(void)
   hfdcan1.Init.ClockDivider = FDCAN_CLOCK_DIV1;
   hfdcan1.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   hfdcan1.Init.Mode = FDCAN_MODE_NORMAL;
-  hfdcan1.Init.AutoRetransmission = DISABLE;
+  hfdcan1.Init.AutoRetransmission = ENABLE;
   hfdcan1.Init.TransmitPause = DISABLE;
   hfdcan1.Init.ProtocolException = DISABLE;
-  hfdcan1.Init.NominalPrescaler = 16;
-  hfdcan1.Init.NominalSyncJumpWidth = 1;
-  hfdcan1.Init.NominalTimeSeg1 = 1;
-  hfdcan1.Init.NominalTimeSeg2 = 1;
-  hfdcan1.Init.DataPrescaler = 1;
-  hfdcan1.Init.DataSyncJumpWidth = 1;
-  hfdcan1.Init.DataTimeSeg1 = 1;
-  hfdcan1.Init.DataTimeSeg2 = 1;
+  hfdcan1.Init.NominalPrescaler = 12;
+  hfdcan1.Init.NominalSyncJumpWidth = 2;
+  hfdcan1.Init.NominalTimeSeg1 = 13;
+  hfdcan1.Init.NominalTimeSeg2 = 2;
+  hfdcan1.Init.DataPrescaler = 12;
+  hfdcan1.Init.DataSyncJumpWidth = 2;
+  hfdcan1.Init.DataTimeSeg1 = 13;
+  hfdcan1.Init.DataTimeSeg2 = 2;
   hfdcan1.Init.StdFiltersNbr = 1;
   hfdcan1.Init.ExtFiltersNbr = 0;
   hfdcan1.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
@@ -289,13 +291,17 @@ static void CAN_User_Init(void)
   {
     Error_Handler();
   }
+
+  CAN_Print_Status("CAN start");
 }
 
 static void CAN_Send_Button_Message(void)
 {
   FDCAN_TxHeaderTypeDef TxHeader = {0};
 
-  TxHeader.Identifier = 0x123;
+  CAN_Recover_If_BusOff();
+
+  TxHeader.Identifier = 0x111;
   TxHeader.IdType = FDCAN_STANDARD_ID;
   TxHeader.TxFrameType = FDCAN_DATA_FRAME;
   TxHeader.DataLength = FDCAN_DLC_BYTES_8;
@@ -307,16 +313,19 @@ static void CAN_Send_Button_Message(void)
 
   if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, CanTxData) == HAL_OK)
   {
-    printf("TX CAN ID 0x%03lX:", (unsigned long)TxHeader.Identifier);
+    printf("TX queued CAN ID 0x%03lX:", (unsigned long)TxHeader.Identifier);
     for (uint8_t i = 0; i < 8; i++)
     {
       printf(" %02X", CanTxData[i]);
     }
     printf("\n\r");
+    HAL_Delay(2);
+    CAN_Print_Status("After TX");
   }
   else
   {
     printf("CAN TX failed\n\r");
+    CAN_Print_Status("TX add failed");
   }
 }
 
@@ -386,6 +395,46 @@ static uint8_t CAN_DlcToBytes(uint32_t dlc)
       return 64;
     default:
       return 8;
+  }
+}
+
+static void CAN_Print_Status(const char *prefix)
+{
+  FDCAN_ProtocolStatusTypeDef status = {0};
+  FDCAN_ErrorCountersTypeDef counters = {0};
+
+  if ((HAL_FDCAN_GetProtocolStatus(&hfdcan1, &status) == HAL_OK) &&
+      (HAL_FDCAN_GetErrorCounters(&hfdcan1, &counters) == HAL_OK))
+  {
+    printf("%s: LEC=%lu ACT=%lu EW=%lu EP=%lu BO=%lu REC=%lu TEC=%lu TXfree=%lu\n\r",
+           prefix,
+           (unsigned long)status.LastErrorCode,
+           (unsigned long)status.Activity,
+           (unsigned long)status.Warning,
+           (unsigned long)status.ErrorPassive,
+           (unsigned long)status.BusOff,
+           (unsigned long)counters.RxErrorCnt,
+           (unsigned long)counters.TxErrorCnt,
+           (unsigned long)HAL_FDCAN_GetTxFifoFreeLevel(&hfdcan1));
+  }
+}
+
+static void CAN_Recover_If_BusOff(void)
+{
+  FDCAN_ProtocolStatusTypeDef status = {0};
+
+  if ((HAL_FDCAN_GetProtocolStatus(&hfdcan1, &status) == HAL_OK) &&
+      (status.BusOff != 0U))
+  {
+    printf("CAN bus-off, restarting FDCAN\n\r");
+    (void)HAL_FDCAN_AbortTxRequest(&hfdcan1,
+                                   FDCAN_TX_BUFFER0 | FDCAN_TX_BUFFER1 | FDCAN_TX_BUFFER2);
+    (void)HAL_FDCAN_Stop(&hfdcan1);
+    if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK)
+    {
+      Error_Handler();
+    }
+    CAN_Print_Status("After restart");
   }
 }
 
