@@ -23,6 +23,12 @@ through the H-bridges, not from the Pico 3.3 V pin.
 | Encoder power | Pico 3V3 and GND | AS5600 VCC and GND |
 | Motor power | External motor supply | H-bridge VM / motor power input |
 
+## Figures
+
+![HW18 wiring figure 1](figures/fig1.jpeg)
+
+![HW18 wiring figure 2](figures/fig2.jpeg)
+
 ## Operation
 
 Hold the joystick at center when the Pico starts. The firmware samples the two
