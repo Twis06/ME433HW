@@ -1,7 +1,7 @@
 # HW18 Force Feedback Joystick
 
-This folder contains the Pico 2 W firmware for the two-axis force-feedback
-joystick. The default `HW18` target builds `spring_feedback.c`.
+This folder contains the simple Pico 2 W center-spring firmware for the
+two-axis force-feedback joystick.
 
 ## Wiring
 
@@ -23,32 +23,8 @@ through the H-bridges, not from the Pico 3.3 V pin.
 | Encoder power | Pico 3V3 and GND | AS5600 VCC and GND |
 | Motor power | External motor supply | H-bridge VM / motor power input |
 
-## Build
+## Operation
 
-```sh
-cmake --build build --target HW18
-```
-
-Flash `build/HW18.uf2` with the Pico extension run button or by copying the UF2
-to the Pico bootloader drive.
-
-## Firmware
-
-`spring_feedback.c` keeps the joystick near the calibrated center using AS5600
-encoder feedback. The controller uses signed encoder position, filtered encoder
-velocity, a small breakaway drive floor, and adaptive stall boost. INA219 current
-sensors are not used in this build.
-
-Serial commands over USB:
-
-| Command | Action |
-|---|---|
-| `z` | Set current encoder positions as zero and enable spring |
-| `s` | Disable spring and stop both motors |
-| `g` / `c` | Enable spring feedback |
-| `+` / `-` | Increase or decrease spring strength |
-| `x` / `y` | Flip X/Y motor direction if an axis pushes away from center |
-
-Status lines print raw encoder counts, signed position, filtered velocity,
-motor command, near-center assist, speed assist, adaptive boost, motor direction
-flags, and encoder miss counts.
+Hold the joystick at center when the Pico starts. The firmware samples the two
+AS5600 encoders, saves that position as zero, and then automatically starts a
+simple encoder-feedback spring back to center.
